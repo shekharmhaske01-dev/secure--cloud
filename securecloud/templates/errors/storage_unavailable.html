@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Storage unavailable{% endblock %}
+{% block content %}
+<section class="card error-card">
+  <p class="error-code">503</p>
+  <h1>Object storage is unavailable</h1>
+  <p class="lead">
+    {{ error_message or "The object-storage backend could not be reached or is not configured." }}
+  </p>
+  <p class="small muted">
+    The operation was aborted without touching stored data, and no alternative
+    storage backend was used as a fallback.
+  </p>
+
+  {% if storage_description %}
+    <table class="kv-table compact">
+      <tbody>
+        <tr><th>Backend</th><td>{{ storage_description.display_name }}</td></tr>
+        <tr><th>Bucket</th><td><code>{{ storage_description.bucket }}</code></td></tr>
+        <tr><th>Endpoint</th><td><code class="break">{{ storage_description.endpoint }}</code></td></tr>
+        <tr><th>Region</th><td><code>{{ storage_description.region }}</code></td></tr>
+        {% if storage_description.missing_settings %}
+          <tr><th>Missing settings</th><td><code>{{ storage_description.missing_settings|join(', ') }}</code></td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  <div class="btn-row">
+    {% if current_user %}
+      <a class="btn btn-primary" href="{{ url_for('dashboard.settings') }}">Open settings</a>
+      <a class="btn btn-ghost" href="{{ url_for('files.index') }}">My files</a>
+    {% else %}
+      <a class="btn btn-primary" href="{{ url_for('dashboard.index') }}">Back to home</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

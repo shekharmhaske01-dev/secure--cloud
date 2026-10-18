@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}{{ file.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="break">{{ file.original_filename }}</h1>
+    <p class="muted">
+      <span class="badge {{ file.status_css() }}">{{ file.status_label() }}</span>
+      <span class="dot" aria-hidden="true">&middot;</span>
+      Stored in {{ file.storage_backend }} storage
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if file.is_downloadable %}
+      <a class="btn btn-primary" href="{{ url_for('files.download', file_id=file.id) }}">Download</a>
+    {% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('files.index') }}">Back to files</a>
+  </div>
+</div>
+
+{% if file.status == 'failed' and file.last_error %}
+  <div class="alert alert-danger" role="alert">
+    <strong>This upload did not complete.</strong> {{ file.last_error }}
+  </div>
+{% endif %}
+
+<div class="two-col">
+  <section class="card">
+    <h2>File metadata</h2>
+    <table class="kv-table">
+      <tbody>
+        <tr><th>Original filename</th><td class="break">{{ file.original_filename }}</td></tr>
+        <tr><th>Logical size</th><td>{{ human_size(file.file_size) }} <span class="muted small">({{ file.file_size }} bytes)</span></td></tr>
+        <tr><th>MIME type</th><td><code>{{ file.mime_type }}</code></td></tr>
+        <tr><th>Block size</th><td>{{ human_size(file.block_size) }}</td></tr>
+        <tr><th>Block count</th><td>{{ file.block_count }}</td></tr>
+        <tr><th>Stored blocks</th><td>{{ file.stored_block_count }}</td></tr>
+        <tr><th>Encrypted size</th><td>{{ human_size(file.encrypted_bytes) }}</td></tr>
+        <tr><th>Uploaded</th><td>{{ file.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') if file.created_at else '-' }}</td></tr>
+        <tr><th>Completed</th><td>{{ file.completed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if file.completed_at else '-' }}</td></tr>
+        <tr><th>Internal identifier</th><td><code>{{ file.public_id }}</code></td></tr>
+        <tr>
+          <th>Plaintext digest</th>
+          <td>{% if file.plaintext_sha256 %}<code class="break small">{{ file.plaintext_sha256 }}</code>{% else %}<span class="muted">not recorded</span>{% endif %}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Encryption &amp; storage status</h2>
+    <table class="kv-table">
+      <tbody>
+        <tr><th>Cipher</th><td>AES-256-GCM (authenticated)</td></tr>
+        <tr><th>Format version</th><td>v1</td></tr>
+        <tr><th>Key model</th><td>Envelope: per-file DEK wrapped by the KEK</td></tr>
+        <tr>
+          <th>Wrapped key</th>
+          <td>
+            {% if file.wrapped_key %}
+              <span class="badge badge-ok">Present</span>
+              <small class="muted">KEK {{ short_hash(file.wrapped_key.kek_fingerprint, 12) }}</small>
+            {% else %}
+              <span class="badge badge-danger">Missing</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr><th>Storage backend</th><td>{{ file.storage_backend }}</td></tr>
+        <tr>
+          <th>Cleanup pending</th>
+          <td>
+            {% if file.pending_cleanup %}<span class="badge badge-warn">Yes</span>
+            {% else %}<span class="badge badge-ok">No</span>{% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    {% if manifest %}
+      <h3>Integrity check</h3>
+      <p>
+        {% if manifest.ok %}
+          <span class="badge badge-ok">Passed</span>
+        {% else %}
+          <span class="badge badge-danger">Failed</span>
+        {% endif %}
+        <span class="muted small">{{ manifest.checks|selectattr('ok')|list|length }}/{{ manifest.checks|length }} checks passed</span>
+      </p>
+      <ul class="check-list compact small">
+        {% for check in manifest.checks %}
+          <li class="{{ 'ok' if check.ok else 'bad' }}">
+            <strong>{{ check.name|replace('_', ' ') }}</strong> &mdash; {{ check.detail }}
+          </li>
+        {% endfor %}
+      </ul>
+      {% if manifest.problems %}
+        <ul class="small muted">
+          {% for problem in manifest.problems[:4] %}<li>{{ problem }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    {% endif %}
+
+    <div class="btn-row">
+      <form class="inline-form" method="post" action="{{ url_for('files.verify', file_id=file.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-ghost btn-sm" type="submit">Verify manifest</button>
+      </form>
+      {% if file.is_downloadable %}
+        <form class="inline-form" method="post" action="{{ url_for('files.verify', file_id=file.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="deep" value="1">
+          <button class="btn btn-ghost btn-sm" type="submit"
+                  title="Decrypts every block and compares the whole-file digest">
+            Verify &amp; authenticate blocks
+          </button>
+        </form>
+      {% endif %}
+      {% if not file.is_deleted %}
+        <form class="inline-form" method="post" action="{{ url_for('files.delete', file_id=file.id) }}"
+              data-confirm="Delete '{{ file.original_filename }}' and all of its encrypted blocks?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-danger btn-sm" type="submit">Delete file</button>
+        </form>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Encrypted block manifest</h2>
+  <p class="small muted">
+    Object keys contain only the opaque internal identifier and the block index &mdash;
+    never your filename. Each object stores exactly one encrypted block.
+    Total encryption overhead: <strong>{{ human_size(plaintext_overhead) }}</strong>
+    (16-byte GCM tag per block).
+  </p>
+  {% if blocks %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Object key</th><th>Plaintext</th><th>Encrypted</th>
+            <th>Nonce</th><th>Format</th><th>Stored</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for block in blocks %}
+            <tr>
+              <td>{{ block.block_index }}</td>
+              <td><code class="break small">{{ block.object_key }}</code></td>
+              <td>{{ human_size(block.plaintext_size) }}</td>
+              <td>{{ human_size(block.encrypted_size) }}</td>
+              <td><code class="small">{{ block.nonce_hex }}</code></td>
+              <td>v{{ block.format_version }}</td>
+              <td class="muted small">{{ block.created_at.strftime('%H:%M:%S') if block.created_at else '-' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">No encrypted blocks are recorded for this file.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>SecureCloud.initConfirmations();</script>
+{% endblock %}

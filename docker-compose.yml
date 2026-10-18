@@ -1,0 +1,56 @@
+# Local development stack.
+#   docker compose up --build            -> SecureCloud + MinIO (S3-compatible test endpoint)
+#   docker compose up -d minio           -> only the local S3 test server
+#
+# MinIO is a DEVELOPMENT test double for the S3 protocol.
+# It is NOT Neon Object Storage. Point NEON_STORAGE_* at Neon for the real deployment.
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      FLASK_CONFIG: development
+      SECURECLOUD_STORAGE_BACKEND: ${SECURECLOUD_STORAGE_BACKEND:-s3}
+      NEON_STORAGE_ENDPOINT_URL: ${NEON_STORAGE_ENDPOINT_URL:-http://minio:9000}
+      NEON_STORAGE_REGION: ${NEON_STORAGE_REGION:-us-east-1}
+      NEON_STORAGE_BUCKET: ${NEON_STORAGE_BUCKET:-securecloud-blocks}
+      NEON_STORAGE_ACCESS_KEY_ID: ${NEON_STORAGE_ACCESS_KEY_ID:-minioadmin}
+      NEON_STORAGE_SECRET_ACCESS_KEY: ${NEON_STORAGE_SECRET_ACCESS_KEY:-minioadmin}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./instance:/app/instance
+      - ./staging:/app/staging
+    depends_on:
+      - minio
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  create-bucket:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 2; done;
+      mc mb --ignore-existing local/securecloud-blocks;
+      echo 'bucket ready';
+      "
+
+volumes:
+  minio-data:

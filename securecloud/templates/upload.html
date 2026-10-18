@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Upload{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Upload and encrypt</h1>
+    <p class="muted">Your file is segmented, encrypted and then stored as separate cloud objects.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('files.index') }}">My files</a>
+</div>
+
+{% if not crypto_ready %}
+  <div class="alert alert-danger" role="alert">
+    Uploads are disabled: no valid key-encryption key is configured
+    (<code>SECURECLOUD_KEY_ENCRYPTION_KEY</code>).
+  </div>
+{% endif %}
+
+<div class="two-col">
+  <section class="card">
+    <form method="post" enctype="multipart/form-data" id="upload-form" novalidate>
+      {{ form.hidden_tag() }}
+
+      <div class="dropzone" id="dropzone" tabindex="0" role="button"
+           aria-describedby="dropzone-help">
+        <p class="dropzone-title">Choose a file or drop it here</p>
+        <p class="muted small" id="dropzone-help">
+          Documents, images, PDFs, ZIP archives and more &mdash; up to
+          {{ human_size(max_upload_bytes) }} per file.
+        </p>
+        {{ form.file(class="input-file", id="file-input",
+                     accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.webp,.zip,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.md,.log,.bin,.tar,.gz") }}
+        {% for error in form.file.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      </div>
+
+      <div class="selection" id="selection" hidden>
+        <dl class="kv-table compact">
+          <tbody>
+            <tr><th>Filename</th><td id="sel-name">-</td></tr>
+            <tr><th>Size</th><td id="sel-size">-</td></tr>
+            <tr><th>Estimated blocks</th><td id="sel-blocks">-</td></tr>
+          </tbody>
+        </dl>
+      </div>
+
+      <div class="progress-wrap" id="progress-wrap" hidden aria-live="polite">
+        <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+        <p class="small muted" id="progress-text">Preparing&hellip;</p>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="upload-button"
+              {% if not crypto_ready %}disabled{% endif %}>
+        Upload and encrypt
+      </button>
+      <p class="small muted">
+        Uploads are rate limited. Each block is encrypted with a fresh nonce before it
+        leaves this server.
+      </p>
+    </form>
+  </section>
+
+  <aside class="card">
+    <h2>What happens on upload</h2>
+    <ol class="steps small">
+      <li>The file is written to a staging directory with a server-enforced size limit.</li>
+      <li>A random 256-bit data-encryption key (DEK) is generated for this file only.</li>
+      <li>The file is split into {{ human_size(block_size) }} blocks.</li>
+      <li>Each block is encrypted with AES-256-GCM using a fresh nonce and AAD
+          <code>v1|file-id|block-index</code>.</li>
+      <li>Each encrypted block is uploaded as its own object, named with an opaque
+          identifier &mdash; never your filename.</li>
+      <li>All objects are verified, then the DEK is wrapped with the key-encryption key
+          and only the wrapped key is stored in the database.</li>
+      <li>If anything fails, the metadata row is marked <em>failed</em>, the uploaded
+          objects are removed, and any leftover objects are queued for retry.</li>
+    </ol>
+
+    <h3>Storage target</h3>
+    <p class="small">
+      <span class="badge {{ 'badge-warn' if storage.is_local else 'badge-ok' }}">{{ storage.kind_label }}</span>
+      {% if not storage.is_local %}<br><code class="break">{{ storage.location }}</code>{% endif %}
+    </p>
+    <p class="small muted">{{ storage.notes|join(' ') }}</p>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>
+  SecureCloud.initUpload({
+    blockSize: {{ block_size|int }},
+    maxBytes: {{ (max_upload_bytes or 0)|int }},
+    formId: 'upload-form',
+    inputId: 'file-input'
+  });
+</script>
+{% endblock %}

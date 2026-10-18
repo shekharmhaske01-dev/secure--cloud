@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="muted">Signed in as <strong>{{ current_user.username }}</strong>.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="{{ url_for('files.upload') }}">Quick upload</a>
+    <a class="btn btn-ghost" href="{{ url_for('files.index') }}">My files</a>
+  </div>
+</div>
+
+<section class="stat-grid">
+  <div class="card stat">
+    <span class="stat-label">Total files</span>
+    <span class="stat-value">{{ stats.total_files }}</span>
+    <span class="stat-hint">Stored under your account</span>
+  </div>
+  <div class="card stat">
+    <span class="stat-label">Logical size</span>
+    <span class="stat-value">{{ human_size(stats.logical_size) }}</span>
+    <span class="stat-hint">Original file sizes combined</span>
+  </div>
+  <div class="card stat">
+    <span class="stat-label">Completed uploads</span>
+    <span class="stat-value">{{ stats.completed }}</span>
+    <span class="stat-hint">{{ stats.failed }} failed upload(s)</span>
+  </div>
+  <div class="card stat">
+    <span class="stat-label">Stored blocks</span>
+    <span class="stat-value">{{ stats.block_count }}</span>
+    <span class="stat-hint">{{ human_size(stats.encrypted_size) }} encrypted</span>
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="card">
+    <h2>Storage configuration</h2>
+    <table class="kv-table">
+      <tbody>
+        <tr>
+          <th>Backend</th>
+          <td>{{ storage.display_name }} <span class="badge {{ 'badge-warn' if storage.is_local else 'badge-ok' }}">{{ storage.kind_label }}</span></td>
+        </tr>
+        <tr><th>Configured</th>
+          <td>
+            {% if storage.configured %}<span class="badge badge-ok">Yes</span>
+            {% else %}<span class="badge badge-danger">No</span>{% endif %}
+          </td>
+        </tr>
+        <tr><th>Connectivity</th>
+          <td>
+            {% if storage_health.ok %}
+              <span class="badge badge-ok">OK</span> {{ storage_health.message }}
+            {% else %}
+              <span class="badge badge-danger">Failed</span> {{ storage_health.message }}
+            {% endif %}
+          </td>
+        </tr>
+        {% if not storage.is_local %}
+          <tr><th>Bucket</th><td><code>{{ storage.bucket }}</code></td></tr>
+          <tr><th>Region</th><td><code>{{ storage.region }}</code></td></tr>
+          <tr><th>Endpoint</th><td><code class="break">{{ storage.endpoint }}</code></td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    <p class="small muted">
+      <a href="{{ url_for('dashboard.settings') }}">Open settings</a> for configuration status and guidance.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Encryption status</h2>
+    <table class="kv-table">
+      <tbody>
+        <tr>
+          <th>Key-encryption key</th>
+          <td>
+            {% if key_status and key_status.valid %}
+              <span class="badge badge-ok">Loaded</span>
+            {% else %}
+              <span class="badge badge-danger">Missing</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr><th>Key size</th><td>{% if key_status and key_status.key_size_bits %}{{ key_status.key_size_bits }}-bit{% else %}&ndash;{% endif %}</td></tr>
+        <tr><th>Algorithm</th><td>AES-256-GCM (per block)</td></tr>
+        <tr><th>Block size</th><td>{{ human_size(block_size) }}</td></tr>
+        <tr>
+          <th>Encryption overhead</th>
+          <td>{{ human_size(stats.overhead) }} <span class="muted small">(16-byte GCM tag per block)</span></td>
+        </tr>
+      </tbody>
+    </table>
+    {% if not crypto_ready %}
+      <p class="alert alert-danger small">
+        Uploads and downloads are disabled until a valid key-encryption key is configured.
+      </p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Recent files</h2>
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('files.index') }}">View all</a>
+  </div>
+  {% if recent_files %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>File</th><th>Size</th><th>Blocks</th><th>Status</th><th>Uploaded</th><th class="right">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for file in recent_files %}
+            <tr>
+              <td class="cell-name">
+                <a href="{{ url_for('files.details', file_id=file.id) }}">{{ file.original_filename }}</a>
+                <small class="muted">{{ file.mime_type|truncate(40, true) }}</small>
+              </td>
+              <td>{{ human_size(file.file_size) }}</td>
+              <td>{{ file.block_count }}</td>
+              <td><span class="badge {{ file.status_css() }}">{{ file.status_label() }}</span></td>
+              <td class="muted small">{{ file.created_at.strftime('%Y-%m-%d %H:%M') if file.created_at else '-' }}</td>
+              <td class="right nowrap">
+                {% if file.is_downloadable %}
+                  <a class="btn btn-ghost btn-sm" href="{{ url_for('files.download', file_id=file.id) }}">Download</a>
+                {% endif %}
+                <a class="btn btn-ghost btn-sm" href="{{ url_for('files.details', file_id=file.id) }}">Details</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <p>No files yet.</p>
+      <a class="btn btn-primary" href="{{ url_for('files.upload') }}">Upload your first file</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

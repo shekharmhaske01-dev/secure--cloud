@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}How it works{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>How {{ app_name }} works</h1>
+    <p class="muted">Architecture, encryption format and operational notes.</p>
+  </div>
+</div>
+
+<section class="card">
+  <h2>End-to-end flow</h2>
+  <div class="diagram" role="img"
+       aria-label="Upload pipeline: file to staging, chunking, AES-256-GCM encryption, object storage; download pipeline reverses it.">
+    <div class="diagram-col">
+      <h3>Upload</h3>
+      <ol class="steps small">
+        <li>Client selects a file; the browser shows name, size and estimated block count.</li>
+        <li>The server stages the stream to disk, enforcing the maximum upload size.</li>
+        <li>A random 256-bit DEK is generated for this file.</li>
+        <li>The file is segmented into {{ human_size(block_size) }} blocks.</li>
+        <li>Each block is encrypted: <code>AES-256-GCM(DEK, nonce, block, AAD)</code>.</li>
+        <li>Each ciphertext is stored as one object named by opaque id + block index.</li>
+        <li>The DEK is wrapped with the KEK; only the wrapped key is persisted.</li>
+        <li>Metadata is committed as <em>complete</em> only after every object is verified.</li>
+      </ol>
+    </div>
+    <div class="diagram-col">
+      <h3>Download</h3>
+      <ol class="steps small">
+        <li>Session and file ownership are verified.</li>
+        <li>The wrapped DEK is unwrapped in memory with the KEK.</li>
+        <li>Blocks are fetched and ordered by verified block index.</li>
+        <li>Every block is authenticated and decrypted (tampering aborts the download).</li>
+        <li>The plaintext is written to a temporary file and its length is checked.</li>
+        <li>The file is streamed to the browser with a sanitised name.</li>
+        <li>The temporary plaintext file is deleted after the response.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="card">
+    <h2>Encrypted block format (v1)</h2>
+    <table class="kv-table compact">
+      <tbody>
+        {% for key, value in block_format.items() %}
+          <tr><th>{{ key|replace('_', ' ') }}</th><td class="break"><code>{{ value }}</code></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Database tables</h2>
+    <ul class="check-list small">
+      <li><code>users</code> &mdash; account, Argon2id hash, server-side session token.</li>
+      <li><code>stored_files</code> &mdash; owner, filename, size, block size/count, lifecycle status.</li>
+      <li><code>encrypted_blocks</code> &mdash; block index, object key, nonce, sizes, format version.</li>
+      <li><code>wrapped_keys</code> &mdash; wrapped DEK, wrap nonce, KEK fingerprint.</li>
+      <li><code>storage_operations</code> &mdash; upload/download/delete audit and error categories.</li>
+      <li><code>cleanup_jobs</code> &mdash; recoverable object-cleanup work.</li>
+    </ul>
+    <p class="small muted">
+      No plaintext content and no unwrapped key is ever written to the database.
+    </p>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Operational status</h2>
+  <table class="kv-table compact">
+    <tbody>
+      <tr><th>Registered accounts</th><td>{{ user_count }}</td></tr>
+      <tr><th>Stored files</th><td>{{ file_count }}</td></tr>
+      <tr>
+        <th>Storage backend</th>
+        <td>{{ storage.display_name }} <span class="badge {{ 'badge-warn' if storage.is_local else 'badge-ok' }}">{{ storage.kind_label }}</span></td>
+      </tr>
+      <tr><th>Server time (UTC)</th><td>{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</td></tr>
+    </tbody>
+  </table>
+</section>
+{% endblock %}

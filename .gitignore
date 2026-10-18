@@ -1,0 +1,52 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+
+# Databases (never commit real metadata or wrapped-key records)
+*.db
+*.sqlite
+*.sqlite3
+instance/*.db
+instance/*.sqlite3
+securecloud/*.db
+
+# Key material
+*.key
+*.pem
+keys/
+secrets/
+
+# Local object storage / staging artefacts
+staging/*
+!staging/.gitkeep
+instance/*
+!instance/.gitkeep
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

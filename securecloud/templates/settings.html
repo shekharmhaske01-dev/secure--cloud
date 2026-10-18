@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Settings &amp; status</h1>
+    <p class="muted">Configuration, storage connectivity and recovery information.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('files.index') }}">My files</a>
+</div>
+
+<div class="two-col">
+  <section class="card">
+    <h2>Application</h2>
+    <table class="kv-table">
+      <tbody>
+        <tr><th>Application</th><td>{{ app_name }} v{{ app_version }}</td></tr>
+        <tr><th>Environment</th><td><code>{{ config_summary.environment }}</code></td></tr>
+        <tr><th>Block size</th><td>{{ human_size(config_summary.block_size) }}
+          <span class="muted small">(allowed {{ human_size(block_size_bounds.min) }}&ndash;{{ human_size(block_size_bounds.max) }})</span></td></tr>
+        <tr><th>Max upload size</th><td>{{ human_size(config_summary.max_upload_bytes) }}</td></tr>
+        <tr><th>Session lifetime</th><td>{{ config_summary.session_hours }} hour(s)</td></tr>
+        <tr><th>Stale upload threshold</th><td>{{ config_summary.stale_upload_minutes }} minute(s)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Rate limits</h3>
+    <table class="kv-table compact">
+      <tbody>
+        <tr><th>Sign-in</th><td>{{ config_summary.rate_limits.login }}</td></tr>
+        <tr><th>Registration</th><td>{{ config_summary.rate_limits.register }}</td></tr>
+        <tr><th>Upload</th><td>{{ config_summary.rate_limits.upload }}</td></tr>
+        <tr><th>Download</th><td>{{ config_summary.rate_limits.download }}</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Key management</h2>
+    <table class="kv-table">
+      <tbody>
+        <tr>
+          <th>KEK status</th>
+          <td>
+            {% if key_status.valid %}<span class="badge badge-ok">Valid</span>
+            {% else %}<span class="badge badge-danger">Problem</span>{% endif %}
+            {{ key_status.message }}
+          </td>
+        </tr>
+        <tr><th>Key size</th><td>{% if key_status.key_size_bits %}{{ key_status.key_size_bits }}-bit{% else %}&ndash;{% endif %}</td></tr>
+        <tr>
+          <th>Fingerprint</th>
+          <td>
+            {% if key_status.fingerprint %}
+              <code>{{ short_hash(key_status.fingerprint, 16) }}</code>
+              <small class="muted">(SHA-256 of the key material &mdash; safe to compare, useless to an attacker)</small>
+            {% else %}
+              <span class="muted">not available</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr><th>Source</th><td><code>SECURECLOUD_KEY_ENCRYPTION_KEY</code> (environment / secret manager)</td></tr>
+      </tbody>
+    </table>
+    <div class="alert alert-warning small">
+      <strong>Back up the key-encryption key.</strong>
+      It is stored outside the database and outside object storage. If it is lost,
+      every existing file becomes permanently unrecoverable &mdash; the wrapped file keys
+      cannot be unwrapped, and no service can reconstruct the data.
+      Generate a new key with <code>python scripts/generate_encryption_key.py</code>
+      and store it in a password manager or secret vault.
+    </div>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Storage provider</h2>
+  <div id="storage-status">
+    <table class="kv-table">
+      <tbody>
+        <tr>
+          <th>Backend</th>
+          <td>
+            {{ storage.display_name }}
+            <span class="badge {{ 'badge-warn' if storage.is_local else 'badge-ok' }}">{{ storage.kind_label }}</span>
+          </td>
+        </tr>
+        <tr>
+          <th>Configured</th>
+          <td>{% if storage.configured %}<span class="badge badge-ok">Yes</span>{% else %}<span class="badge badge-danger">No</span>{% endif %}</td>
+        </tr>
+        <tr><th>Addressing style</th><td><code>{{ storage.addressing_style }}</code></td></tr>
+        <tr><th>Region</th><td><code>{{ storage.region }}</code></td></tr>
+        <tr><th>Bucket</th><td><code>{{ storage.bucket }}</code></td></tr>
+        <tr><th>Endpoint</th><td><code class="break">{{ storage.endpoint }}</code></td></tr>
+        <tr><th>Object prefix</th><td><code>{{ storage.prefix or '(none)' }}</code></td></tr>
+        <tr>
+          <th>Connectivity</th>
+          <td id="storage-health">
+            {% if storage_health.ok %}
+              <span class="badge badge-ok">OK</span> {{ storage_health.message }}
+            {% else %}
+              <span class="badge badge-danger">Failed</span> {{ storage_health.message }}
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    {% if storage.missing_settings %}
+      <div class="alert alert-danger small">
+        <strong>Missing settings:</strong>
+        <code>{{ storage.missing_settings|join(', ') }}</code>.
+        Cloud operations will fail loudly rather than silently falling back to local storage.
+      </div>
+    {% endif %}
+
+    <h3>Configuration guidance</h3>
+    <ol class="steps small">
+      <li>Create a Neon project and enable object storage for the branch.</li>
+      <li>Read the branch S3 endpoint and region from the Neon console
+          (or run <code>neon env pull</code>) and set
+          <code>NEON_STORAGE_ENDPOINT_URL</code> and <code>NEON_STORAGE_REGION</code>.
+          Do <strong>not</strong> use the PostgreSQL connection string here &mdash;
+          the database endpoint and the object-storage endpoint are different services.</li>
+      <li>Create a credential with storage read/write scope and copy its access key id
+          and secret into <code>NEON_STORAGE_ACCESS_KEY_ID</code> and
+          <code>NEON_STORAGE_SECRET_ACCESS_KEY</code>.</li>
+      <li>Create a private bucket and set <code>NEON_STORAGE_BUCKET</code>.</li>
+      <li>Set <code>SECURECLOUD_STORAGE_BACKEND=s3</code> (path-style addressing is
+          applied automatically, as Neon Object Storage requires).</li>
+      <li>Run <code>python scripts/check_storage.py</code> to verify connectivity.</li>
+    </ol>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="storage-check-button" type="button">Re-run connectivity test</button>
+    </div>
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="card">
+    <h2>Encrypted block format</h2>
+    <table class="kv-table compact">
+      <tbody>
+        {% for key, value in block_format.items() %}
+          <tr><th>{{ key|replace('_', ' ') }}</th><td class="break"><code>{{ value }}</code></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="small muted">
+      An object stores the raw AEAD output (<code>ciphertext||tag</code>); the nonce,
+      format version and sizes live in the metadata database. The AAD binds every block
+      to its format version, file identifier and block index.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Upload recovery</h2>
+    <table class="kv-table compact">
+      <tbody>
+        <tr><th>Failed uploads</th><td>{{ recovery.failed_files }}</td></tr>
+        <tr><th>Deletions in progress</th><td>{{ recovery.deleting_files }}</td></tr>
+        <tr><th>Unfinished uploads</th><td>{{ recovery.unfinished_files }}</td></tr>
+        <tr><th>Pending cleanup jobs</th><td>{{ recovery.pending_cleanup_jobs }}</td></tr>
+        <tr><th>Deleted records</th><td>{{ recovery.deleted_files }}</td></tr>
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('dashboard.run_maintenance') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary btn-sm" type="submit">
+        Recover unfinished uploads &amp; retry cleanup
+      </button>
+    </form>
+    <p class="small muted">
+      Cloud object storage and SQLite cannot share a transaction, so incomplete
+      operations are repaired by compensating work: unfinished staging files are
+      removed, orphaned objects are deleted, and pending jobs are retried.
+    </p>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>SecureCloud.initStorageCheck('storage-check-button', 'storage-status');</script>
+{% endblock %}

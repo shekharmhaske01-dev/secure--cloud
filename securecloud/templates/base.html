@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %} &middot; {{ app_name }}</title>
+  <meta name="description" content="{{ app_tagline }} - encrypted, chunked cloud file storage.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="{{ url_for('dashboard.index') }}">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" role="presentation">
+          <path d="M12 2.6 4.5 6v6.1c0 4.4 3.1 8.2 7.5 9.3 4.4-1.1 7.5-4.9 7.5-9.3V6L12 2.6Z"
+                fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          <path d="M8.7 12.1l2.3 2.3 4.3-4.6" fill="none" stroke="currentColor"
+                stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <strong>{{ app_name }}</strong>
+        <small>{{ app_tagline }}</small>
+      </span>
+    </a>
+
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
+    <label for="nav-toggle" class="nav-toggle-label" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </label>
+
+    <nav class="site-nav" aria-label="Main navigation">
+      {% if current_user %}
+        <a href="{{ url_for('dashboard.dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('files.upload') }}">Upload</a>
+        <a href="{{ url_for('files.index') }}">My files</a>
+        <a href="{{ url_for('dashboard.settings') }}">Settings</a>
+      {% else %}
+        <a href="{{ url_for('dashboard.index') }}">Home</a>
+        <a href="{{ url_for('dashboard.about') }}">How it works</a>
+      {% endif %}
+
+      {% if current_user %}
+        <span class="nav-user" title="Signed in">
+          <span class="avatar" aria-hidden="true">{{ current_user.username[0]|upper }}</span>
+          <span class="nav-username">{{ current_user.username }}</span>
+        </span>
+        <form class="inline-form" method="post" action="{{ url_for('auth.logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
+        </form>
+      {% else %}
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('auth.login') }}">Sign in</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('auth.register') }}">Create account</a>
+      {% endif %}
+    </nav>
+  </div>
+
+  {% if not crypto_ready %}
+    <div class="container">
+      <div class="alert alert-danger compact-alert" role="alert">
+        <strong>Encryption is disabled.</strong>
+        No valid <code>SECURECLOUD_KEY_ENCRYPTION_KEY</code> is configured,
+        so uploads and downloads are unavailable. This is a configuration problem,
+        not an encryption fallback &mdash; no key is ever generated automatically.
+      </div>
+    </div>
+  {% endif %}
+</header>
+
+<main id="main" class="container main" tabindex="-1">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-stack">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category if category in ['success','danger','warning','info'] else 'info' }}" role="alert">
+            <span class="alert-text">{{ message }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <strong>{{ app_name }}</strong> v{{ app_version }}
+      <span class="dot" aria-hidden="true">&middot;</span>
+      <span class="muted">{{ environment }} environment</span>
+    </div>
+    <div class="footer-meta">
+      {% if storage_description %}
+        <span class="badge {{ 'badge-warn' if storage_description.is_local else 'badge-ok' }}">
+          {{ storage_description.kind_label }}
+        </span>
+      {% endif %}
+      {% if key_status %}
+        <span class="badge {{ 'badge-ok' if key_status.valid else 'badge-danger' }}">
+          {{ 'KEK loaded' if key_status.valid else 'KEK missing' }}
+        </span>
+      {% endif %}
+      <a href="{{ url_for('dashboard.about') }}">Documentation</a>
+    </div>
+  </div>
+</footer>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

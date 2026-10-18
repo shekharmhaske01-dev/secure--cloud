@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+
+{% block content %}
+<div class="auth-layout">
+  <div class="card auth-card">
+    <h1>Sign in</h1>
+    <p class="muted">Access your encrypted files.</p>
+
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+      <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+
+      <div class="field">
+        {{ form.username.label }}
+        {{ form.username(class="input" + (" input-error" if form.username.errors else ""),
+                         placeholder="username or you@example.com") }}
+        {% for error in form.username.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.password.label }}
+        {{ form.password(class="input" + (" input-error" if form.password.errors else ""),
+                         placeholder="Your password") }}
+        {% for error in form.password.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      </div>
+
+      <div class="field field-inline">
+        {{ form.remember() }}
+        {{ form.remember.label }}
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+
+    <p class="auth-alt">
+      No account yet? <a href="{{ url_for('auth.register') }}">Create one</a>.
+    </p>
+    <p class="muted small">
+      Sign-in attempts are rate limited. Repeated failures are delayed and may be blocked.
+    </p>
+  </div>
+
+  <aside class="card auth-side">
+    <h2 class="panel-title">Account security</h2>
+    <ul class="check-list small">
+      <li>Passwords are hashed with Argon2id &mdash; never stored in plaintext.</li>
+      <li>Sessions are stored server-side and can be invalidated at any time.</li>
+      <li>Every file operation re-checks ownership before touching data.</li>
+      <li>Errors never reveal whether an account exists.</li>
+    </ul>
+  </aside>
+</div>
+{% endblock %}

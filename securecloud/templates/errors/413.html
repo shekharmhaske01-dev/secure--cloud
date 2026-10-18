@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}File too large{% endblock %}
+{% block content %}
+<section class="card error-card">
+  <p class="error-code">413</p>
+  <h1>File too large</h1>
+  <p class="lead">{{ error_message or "The uploaded file exceeds the configured size limit." }}</p>
+  <p class="small muted">
+    The limit is enforced by the server before segmentation, so an oversized file is
+    never split or stored.
+  </p>
+  <div class="btn-row">
+    <a class="btn btn-primary" href="{{ url_for('files.upload') }}">Choose another file</a>
+    {% if current_user %}<a class="btn btn-ghost" href="{{ url_for('files.index') }}">My files</a>{% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,36 @@
+# render.yaml — Render.com Blueprint for SecureCloud
+# Deploy: connect this repo to Render and it auto-detects this file.
+
+services:
+  - type: web
+    name: securecloud
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SECURECLOUD_KEY_ENCRYPTION_KEY
+        sync: false                         # set manually (base64-encoded 32-byte key)
+      - key: SECURECLOUD_STORAGE_BACKEND
+        value: local
+      - key: SECURECLOUD_SESSION_COOKIE_SECURE
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+    disk:
+      name: securecloud-data
+      mountPath: /app/persistent
+      sizeGB: 1
+    buildCommand: ""
+    startCommand: >-
+      sh -c "
+        mkdir -p /app/persistent/instance /app/persistent/staging/local_object_storage /app/persistent/staging/downloads &&
+        ln -sfn /app/persistent/instance /app/instance &&
+        ln -sfn /app/persistent/staging /app/staging &&
+        python -c \"from securecloud import create_app; from securecloud.extensions import db; app=create_app('production'); app.app_context().push(); db.create_all(); print('DB ready')\" &&
+        gunicorn app:app --config gunicorn.conf.py
+      "

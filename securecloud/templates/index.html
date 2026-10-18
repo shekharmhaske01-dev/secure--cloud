@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Secure cloud file storage{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <span class="pill">Cloud Computing mini-project</span>
+    <h1>Encrypted, chunked file storage in the cloud</h1>
+    <p class="lead">
+      {{ app_name }} splits each file into blocks, encrypts every block with
+      AES-256-GCM, and stores the encrypted blocks as separate objects in
+      S3-compatible cloud object storage. Downloads decrypt and reconstruct the
+      original file byte for byte &mdash; after verifying every authentication tag.
+    </p>
+    <div class="hero-actions">
+      {% if current_user %}
+        <a class="btn btn-primary btn-lg" href="{{ url_for('files.upload') }}">Upload a file</a>
+        <a class="btn btn-ghost btn-lg" href="{{ url_for('dashboard.dashboard') }}">Go to dashboard</a>
+      {% else %}
+        <a class="btn btn-primary btn-lg" href="{{ url_for('auth.register') }}">Create a free account</a>
+        <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">Sign in</a>
+      {% endif %}
+    </div>
+    <dl class="hero-facts">
+      <div><dt>Block size</dt><dd>{{ human_size(block_size) }}</dd></div>
+      <div><dt>Encryption</dt><dd>AES-256-GCM</dd></div>
+      <div><dt>Key model</dt><dd>Envelope (per-file DEK)</dd></div>
+      <div><dt>Storage</dt><dd>{{ 'Local development' if storage.is_local else 'S3-compatible cloud' }}</dd></div>
+    </dl>
+  </div>
+
+  <aside class="hero-panel" aria-label="Pipeline overview">
+    <h2 class="panel-title">The storage pipeline</h2>
+    <ol class="pipeline">
+      <li><span class="step">1</span><div><strong>Upload</strong><small>Staged to disk with a server-side size limit.</small></div></li>
+      <li><span class="step">2</span><div><strong>Segment</strong><small>Split into independent blocks (a partial final block is fine).</small></div></li>
+      <li><span class="step">3</span><div><strong>Encrypt</strong><small>Fresh nonce + AAD binding each block to its file and index.</small></div></li>
+      <li><span class="step">4</span><div><strong>Store</strong><small>One cloud object per encrypted block, named with an opaque id.</small></div></li>
+      <li><span class="step">5</span><div><strong>Reconstruct</strong><small>Fetch, authenticate, decrypt and reassemble in block order.</small></div></li>
+    </ol>
+  </aside>
+</section>
+
+<section class="section">
+  <h2 class="section-title">What the project demonstrates</h2>
+  <div class="feature-grid">
+    {% for feature in features %}
+      <article class="card feature-card">
+        <span class="feature-icon feature-icon-{{ feature.icon }}" aria-hidden="true"></span>
+        <h3>{{ feature.title }}</h3>
+        <p>{{ feature.text }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="two-col">
+    <article class="card">
+      <h2>How your file is protected</h2>
+      <ul class="check-list">
+        <li>A unique 256-bit data-encryption key is generated for every file.</li>
+        <li>Blocks are sealed with AES-256-GCM; the tag is verified before any
+            plaintext is released.</li>
+        <li>Additional authenticated data binds each block to the format version,
+            the file identifier and the block index &mdash; so blocks cannot be
+            moved between files or reordered.</li>
+        <li>The file key itself is wrapped by a key-encryption key that lives only
+            in the environment, never in the database.</li>
+        <li>Only encrypted blocks and metadata are stored; plaintext never leaves
+            the application server.</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h2>Current configuration</h2>
+      <table class="kv-table">
+        <tbody>
+          <tr>
+            <th>Storage backend</th>
+            <td>
+              {{ storage.display_name }}
+              <span class="badge {{ 'badge-warn' if storage.is_local else 'badge-ok' }}">{{ storage.kind_label }}</span>
+            </td>
+          </tr>
+          {% if not storage.is_local %}
+            <tr><th>Bucket</th><td><code>{{ storage.bucket }}</code></td></tr>
+            <tr><th>Region</th><td><code>{{ storage.region }}</code></td></tr>
+            <tr><th>Addressing</th><td><code>{{ storage.addressing_style }}</code> (required by Neon Object Storage)</td></tr>
+          {% else %}
+            <tr><th>Location</th><td><code>{{ storage.location }}</code></td></tr>
+          {% endif %}
+          <tr>
+            <th>Key-encryption key</th>
+            <td>
+              {% if key_status and key_status.valid %}
+                <span class="badge badge-ok">Loaded</span>
+                <code>{{ key_status.key_size_bits }}-bit</code>
+              {% else %}
+                <span class="badge badge-danger">Not configured</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr><th>Default block size</th><td>{{ human_size(block_size) }}</td></tr>
+        </tbody>
+      </table>
+      <p class="muted small">
+        {% if storage.is_local %}
+          Local development storage is active. It is a filesystem adapter for testing,
+          <strong>not</strong> cloud object storage. Set <code>SECURECLOUD_STORAGE_BACKEND=s3</code>
+          and the <code>NEON_STORAGE_*</code> variables to use Neon Object Storage.
+        {% else %}
+          Encrypted blocks are written to S3-compatible cloud object storage using
+          path-style addressing.
+        {% endif %}
+      </p>
+    </article>
+  </div>
+</section>
+
+<section class="section">
+  <div class="cta-band">
+    <div>
+      <h2>Ready to store a file?</h2>
+      <p class="muted">Create an account, upload a file and inspect the block manifest.</p>
+    </div>
+    {% if current_user %}
+      <a class="btn btn-primary" href="{{ url_for('files.upload') }}">Open upload page</a>
+    {% else %}
+      <a class="btn btn-primary" href="{{ url_for('auth.register') }}">Get started</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

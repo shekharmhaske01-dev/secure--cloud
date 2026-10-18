@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}My files{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>My files</h1>
+    <p class="muted">{{ total }} file record(s) visible to your account.</p>
+  </div>
+  <div class="page-actions">
+    <form method="get" class="inline-form">
+      <label class="sr-only" for="status">Filter by status</label>
+      <select class="input input-sm" name="status" id="status" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if not status_filter }}>All statuses</option>
+        <option value="complete" {{ 'selected' if status_filter == 'complete' }}>Stored</option>
+        <option value="uploading" {{ 'selected' if status_filter == 'uploading' }}>Uploading</option>
+        <option value="pending" {{ 'selected' if status_filter == 'pending' }}>Pending</option>
+        <option value="failed" {{ 'selected' if status_filter == 'failed' }}>Failed</option>
+        <option value="deleted" {{ 'selected' if status_filter == 'deleted' }}>Deleted</option>
+      </select>
+    </form>
+    <a class="btn btn-primary" href="{{ url_for('files.upload') }}">Upload</a>
+  </div>
+</div>
+
+<section class="card">
+  {% if files %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Filename</th>
+            <th>Size</th>
+            <th>Blocks</th>
+            <th>Status</th>
+            <th>Uploaded</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for file in files %}
+            <tr>
+              <td class="cell-name">
+                <a href="{{ url_for('files.details', file_id=file.id) }}">{{ file.original_filename }}</a>
+                <small class="muted">{{ file.mime_type|truncate(36, true) }}</small>
+              </td>
+              <td>{{ human_size(file.file_size) }}</td>
+              <td>{{ file.block_count }}</td>
+              <td>
+                <span class="badge {{ file.status_css() }}">{{ file.status_label() }}</span>
+                {% if file.pending_cleanup %}<span class="badge badge-warn" title="Objects are queued for cleanup">cleanup</span>{% endif %}
+              </td>
+              <td class="muted small">{{ file.created_at.strftime('%Y-%m-%d %H:%M') if file.created_at else '-' }}</td>
+              <td class="right nowrap">
+                {% if file.is_downloadable %}
+                  <a class="btn btn-ghost btn-sm" href="{{ url_for('files.download', file_id=file.id) }}">Download</a>
+                  <a class="btn btn-ghost btn-sm" href="{{ url_for('files.details', file_id=file.id) }}">Details</a>
+                {% else %}
+                  <a class="btn btn-ghost btn-sm" href="{{ url_for('files.details', file_id=file.id) }}">Details</a>
+                {% endif %}
+                {% if not file.is_deleted %}
+                  <form class="inline-form" method="post"
+                        action="{{ url_for('files.delete', file_id=file.id) }}"
+                        data-confirm="Delete '{{ file.original_filename }}' and all of its encrypted blocks?">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagination and pagination.pages > 1 %}
+      <nav class="pagination" aria-label="Pagination">
+        {% if pagination.has_prev %}
+          <a class="btn btn-ghost btn-sm"
+             href="{{ url_for('files.index', page=pagination.prev_num, status=status_filter) }}">Previous</a>
+        {% endif %}
+        <span class="muted small">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+        {% if pagination.has_next %}
+          <a class="btn btn-ghost btn-sm"
+             href="{{ url_for('files.index', page=pagination.next_num, status=status_filter) }}">Next</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <div class="empty-state">
+      <h2>Nothing here yet</h2>
+      <p class="muted">Files you upload appear here with their block count and storage status.</p>
+      <a class="btn btn-primary" href="{{ url_for('files.upload') }}">Upload a file</a>
+    </div>
+  {% endif %}
+</section>
+
+<section class="card note-card">
+  <h2>About deletion</h2>
+  <p class="small muted">
+    Deleting a file removes every encrypted block object and the wrapped file key.
+    The metadata record is only marked deleted once all objects are confirmed gone;
+    if the provider refuses some deletions the remaining objects are recorded as a
+    cleanup job and retried from the Settings page. Object storage may retain
+    deleted objects in provider backups, versioning or snapshots, so deletion
+    cannot be guaranteed to be irreversible at the provider level.
+  </p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>SecureCloud.initConfirmations();</script>
+{% endblock %}

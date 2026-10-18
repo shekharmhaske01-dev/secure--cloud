@@ -1,0 +1,63 @@
+# docker-compose.hdfs.yml
+# HDFS overlay — use with the base docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.hdfs.yml up -d
+#
+# Provides a single-node Hadoop cluster (1 NameNode + 1 DataNode) that the
+# SecureCloud application can use as its encrypted-block storage backend.
+
+services:
+  # ── Hadoop NameNode ─────────────────────────────────────────────────────
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: securecloud-namenode
+    restart: unless-stopped
+    hostname: namenode
+    env_file:
+      - hadoop.env
+    environment:
+      CLUSTER_NAME: securecloud-cluster
+    ports:
+      - "9870:9870"   # WebUI / WebHDFS REST API
+      - "8020:8020"   # HDFS IPC
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9870/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # ── Hadoop DataNode ─────────────────────────────────────────────────────
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: securecloud-datanode
+    restart: unless-stopped
+    hostname: datanode
+    env_file:
+      - hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+    depends_on:
+      namenode:
+        condition: service_healthy
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+
+  # ── Override app service to use HDFS backend ────────────────────────────
+  app:
+    environment:
+      SECURECLOUD_STORAGE_BACKEND: hdfs
+      HDFS_NAMENODE_URL: http://namenode:9870
+      HDFS_USER: root
+      HDFS_ROOT_PATH: /securecloud
+    depends_on:
+      namenode:
+        condition: service_healthy
+
+volumes:
+  hadoop_namenode:
+    driver: local
+  hadoop_datanode:
+    driver: local

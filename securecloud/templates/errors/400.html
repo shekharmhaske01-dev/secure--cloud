@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Bad request{% endblock %}
+{% block content %}
+<section class="card error-card">
+  <p class="error-code">400</p>
+  <h1>That request could not be understood</h1>
+  <p class="lead">
+    {{ error_message or "The form or request was malformed, or its security token expired." }}
+  </p>
+  <div class="btn-row">
+    <a class="btn btn-primary" href="{{ url_for('dashboard.index') }}">Back to home</a>
+    {% if current_user %}<a class="btn btn-ghost" href="{{ url_for('files.index') }}">My files</a>{% endif %}
+  </div>
+</section>
+{% endblock %}
